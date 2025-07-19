@@ -35,6 +35,8 @@ mkdir -p /data/lishizheng/code/simpleRL-reason/results/models
 mkdir -p /data/lishizheng/code/simpleRL-reason/results/checkpoints
 mkdir -p /data/lishizheng/code/simpleRL-reason/results/logs
 
+LOG_FILE_PATH="/data/lishizheng/code/simpleRL-reason/results/logs/$RUN_NAME.log"
+
 export WORKING_DIR=$(pwd)
 
 # 启动Ray任务
@@ -56,4 +58,4 @@ ray job submit --address=127.0.0.1:6379 \
           "TORCH_DISTRIBUTED_DEBUG": "'${TORCH_DISTRIBUTED_DEBUG}'"
         }
     }' \
-  -- python -m verl.trainer.main_ppo
+  -- python -m verl.trainer.main_ppo 2>&1 | tee -a $LOG_FILE_PATH

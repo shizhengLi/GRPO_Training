@@ -5,8 +5,8 @@ data:
   prompt_key: prompt
   max_prompt_length: 1024
   max_response_length: 2048
-  train_batch_size: 16
-  val_batch_size: 16
+  train_batch_size: 8
+  val_batch_size: 8
   val_sample_size: 10  # 限制验证样本数量
   return_raw_input_ids: False
   return_raw_chat: False
@@ -73,10 +73,10 @@ actor_rollout_ref:
     enforce_eager: True
     free_cache_engine: True
     load_format: dummy_dtensor
-    tensor_model_parallel_size: 2
+    tensor_model_parallel_size: 1
     swap_space: 40
     max_num_batched_tokens: 4096
-    micro_rollout_batch_size: 16
+    micro_rollout_batch_size: 8
     max_num_seqs: 1024
     model_path: ${actor_rollout_ref.model.path}
     log_prob_micro_batch_size: 2
