@@ -10,11 +10,10 @@ export RAY_DEDUP_LOGS=1
 
 # 设置环境变量
 export PROJECT_NAME=verl_train
-export WANDB_MODE=offline
+export WANDB_MODE=online
 export WANDB_OFFICIAL=1
 export VLLM_MAX_MODEL_LEN=4096  # 限制VLLM最大序列长度
 export VLLM_ENFORCE_EAGER=0     # 禁用eager模式，解决InferenceMode冲突
-export VLLM_ENABLE_CUDA_GRAPH=1 # 启用CUDA图加速
 export CUDA_VISIBLE_DEVICES=0,1  # 明确指定使用的GPU
 export TORCH_CUDA_MEMORY_STATS=1  # 启用更详细的内存统计
 export TORCH_USE_CUDA_DSA=0       # 禁用CUDA设备端断言，避免与InferenceMode冲突
@@ -30,7 +29,7 @@ export RAY_memory_monitor_refresh_ms=0  # 禁用worker killing，避免OOM导致
 
 # 添加Wandb run ID继承
 # 检查是否存在之前的wandb run id
-CHECKPOINT_DIR="/data/lishizheng/code/simpleRL-reason/results/checkpoints/verl-grpo_Qwen-2.5-0.5B_max_response2048_batch32_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35"
+CHECKPOINT_DIR="/data/lishizheng/code/simpleRL-reason/results/checkpoints/verl-grpo_Qwen-2.5-0.5B_max_response2048_batch4_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35"
 WANDB_ID_FILE="${CHECKPOINT_DIR}/wandb_run_id.txt"
 
 if [ -f "$WANDB_ID_FILE" ]; then
@@ -47,7 +46,7 @@ fi
 # mkdir -p /data/lishizheng/code/simpleRL-reason/results/logs
 
 # Default values
-TRAIN_BATCH_SIZE=16
+TRAIN_BATCH_SIZE=4
 VAL_BATCH_SIZE=4  # 减少验证批次大小，避免OOM
 MAX_PROMPT_LENGTH=1024
 MAX_RESPONSE_LENGTH=3072
@@ -72,7 +71,7 @@ TEST_FREQ=5
 REMOVE_CLIP=False
 ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=2
 # 默认值改小，避免验证时内存占用过大
-MICRO_ROLLOUT_BATCH_SIZE=4
+MICRO_ROLLOUT_BATCH_SIZE=8
 REMOVE_PREVIOUS_CKPT=False
 # 增加验证超时设置，防止验证阶段无限等待
 VALIDATION_TIMEOUT=600  # 10分钟超时，避免过长等待
@@ -233,12 +232,9 @@ ray job submit --address=127.0.0.1:6379 \
         "env_vars": {
           "http_proxy": "",
           "https_proxy": "",
-          "WANDB_MODE": "offline",
-          "WANDB_RUN_ID": "'${WANDB_RUN_ID}'",
+          "WANDB_MODE": "'${WANDB_MODE}'",
           "WANDB_OFFICIAL": "1",
           "VLLM_MAX_MODEL_LEN": "4096",
-          "VLLM_ENFORCE_EAGER": "0",
-          "VLLM_ENABLE_CUDA_GRAPH": "1",
           "CUDA_VISIBLE_DEVICES": "0,1",
           "OMP_NUM_THREADS": "4",
           "TORCH_CUDA_MEMORY_STATS": "1",
