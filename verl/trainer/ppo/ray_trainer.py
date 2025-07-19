@@ -576,29 +576,25 @@ class RayPPOTrainer(object):
             
             # 添加超时检查
             max_gen_time = validation_timeout / 2  # 单批次生成时间不应超过总超时时间的一半
+            
+            # 使用简单的时间检查方法
+            gen_start_time = time.time()
             try:
-                import signal
-                
-                # 定义超时处理函数
-                def timeout_handler(signum, frame):
-                    raise TimeoutError(f"Generation took too long (>{max_gen_time}s)")
-                
-                # 设置超时信号
-                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(int(max_gen_time))
-                
                 # 尝试生成序列
                 test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
                 
-                # 取消超时设置
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-            except TimeoutError as e:
-                print(f"Validation generation timeout: {str(e)}")
-                continue
+                # 检查是否超时
+                if time.time() - gen_start_time > max_gen_time:
+                    print(f"Generation completed but took too long: {time.time() - gen_start_time:.2f}s > {max_gen_time:.2f}s")
+                
             except Exception as e:
                 print(f"Error during validation generation: {str(e)}")
-                continue
+                # 如果生成时间已经超过最大限制，则跳过此批次
+                if time.time() - gen_start_time > max_gen_time:
+                    print(f"Generation timeout after {time.time() - gen_start_time:.2f}s")
+                    continue
+                else:
+                    continue
             
             # 添加生成结束日志
             batch_end_time = time.time()
@@ -766,7 +762,7 @@ class RayPPOTrainer(object):
         except Exception as e:
             print(f"Failed to save wandb run ID: {e}")
             pass
-
+            
     # # 新增过滤方法（需在类中定义）
     # def _filter_batch(self, batch, mask: np.ndarray) -> DataProto:
     #     """根据布尔掩码过滤批次数据"""
