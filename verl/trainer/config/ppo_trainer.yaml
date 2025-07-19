@@ -5,8 +5,8 @@ data:
   prompt_key: prompt
   max_prompt_length: 1024
   max_response_length: 2048
-  train_batch_size: 4
-  val_batch_size: 4
+  train_batch_size: 16
+  val_batch_size: 16
   val_sample_size: 10  # 限制验证样本数量
   return_raw_input_ids: False
   return_raw_chat: False
@@ -158,17 +158,17 @@ trainer:
   total_epochs: 10
   total_training_steps: null
   project_name: verl_train
-  experiment_name: verl-grpo_Qwen-2.5-0.5B_max_response2048_batch4_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35
+  experiment_name: verl-grpo_Qwen-2.5-0.5B_max_response2048_batch${data.train_batch_size}_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35
   logger: [ 'console', 'wandb' ]
   nnodes: 1
   n_gpus_per_node: 2
-  save_freq: 5
+  save_freq: 10
   resume_mode: auto
   resume_from_path: False
-  test_freq: 5
+  test_freq: 10
   critic_warmup: 0
   remove_clip: False
   default_hdfs_dir: null
-  default_local_dir: /data/lishizheng/code/simpleRL-reason/results/checkpoints/verl-grpo_Qwen-2.5-0.5B_max_response2048_batch4_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35
+  default_local_dir: /data/lishizheng/code/simpleRL-reason/results/checkpoints/verl-grpo_Qwen-2.5-0.5B_max_response2048_batch${data.train_batch_size}_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35
   remove_previous_ckpt: False
   validation_timeout: 600
