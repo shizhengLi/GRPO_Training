@@ -10,8 +10,10 @@ export RAY_DEDUP_LOGS=1
 
 # 设置环境变量
 export PROJECT_NAME=verl_train
-export WANDB_MODE=online
+export WANDB_MODE=offline
 export WANDB_OFFICIAL=1
+export WANDB_DIR=/data/lishizheng/code/simpleRL-reason/results/wandb
+
 export VLLM_MAX_MODEL_LEN=4096  # 限制VLLM最大序列长度
 export VLLM_ENFORCE_EAGER=0     # 禁用eager模式，解决InferenceMode冲突
 export CUDA_VISIBLE_DEVICES=0,1  # 明确指定使用的GPU
@@ -25,7 +27,6 @@ export HDFS_CHECKPOINT_PATH=/data/lishizheng/code/simpleRL-reason/results/checkp
 export HDFS_LOG_PATH=/data/lishizheng/code/simpleRL-reason/results/logs
 export RUN_NAME=verl-grpo
 export ARNOLD_WORKER_NUM=1  # 1个节点，2张GPU
-export RAY_memory_monitor_refresh_ms=0  # 禁用worker killing，避免OOM导致任务被杀死
 
 # 添加Wandb run ID继承
 # 检查是否存在之前的wandb run id
@@ -70,8 +71,15 @@ SAVE_FREQ=20
 TEST_FREQ=5
 REMOVE_CLIP=False
 ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=2
+
+#############很重要，一直报错：#################
+# train bs=4：
+# rollout bs 报错：4，8
 # 默认值改小，避免验证时内存占用过大
-MICRO_ROLLOUT_BATCH_SIZE=8
+MICRO_ROLLOUT_BATCH_SIZE=16
+
+###########################################
+
 REMOVE_PREVIOUS_CKPT=False
 # 增加验证超时设置，防止验证阶段无限等待
 VALIDATION_TIMEOUT=600  # 10分钟超时，避免过长等待
@@ -142,16 +150,7 @@ LOG_FILE_PATH="$HDFS_LOG_PATH/$RUN_NAME.log"
 while [[ "$#" -gt 0 ]]; do
   echo "Processing: $1"
   case "$1" in
-    --train_batch_size) TRAIN_BATCH_SIZE="$2"; 
-                        # 根据训练批次大小动态调整MICRO_ROLLOUT_BATCH_SIZE
-                        if [ "$2" -le 32 ]; then
-                          MICRO_ROLLOUT_BATCH_SIZE=4
-                        elif [ "$2" -le 64 ]; then
-                          MICRO_ROLLOUT_BATCH_SIZE=32
-                        else
-                          MICRO_ROLLOUT_BATCH_SIZE=64
-                        fi
-                        shift 2 ;;
+    --train_batch_size) TRAIN_BATCH_SIZE="$2"; shift 2 ;;
     --val_batch_size) VAL_BATCH_SIZE="$2"; shift 2 ;;
     --max_prompt_length) MAX_PROMPT_LENGTH="$2"; shift 2 ;;
     --max_response_length) MAX_RESPONSE_LENGTH="$2"; shift 2 ;;
@@ -196,13 +195,15 @@ echo "Val Batch Size: $VAL_BATCH_SIZE"
 echo "Max Prompt Length: $MAX_PROMPT_LENGTH" 
 echo "Max Response Length: $MAX_RESPONSE_LENGTH" 
 echo "Learning Rate: $LEARNING_RATE" 
+echo "--------------------------------"
+echo "Rollout N: $ROLLOUT_N" 
+echo "Micro Rollout Batch Size: $MICRO_ROLLOUT_BATCH_SIZE"
 echo "PPO Mini Batch Size: $PPO_MINI_BATCH_SIZE" 
 echo "PPO Micro Batch Size: $PPO_MICRO_BATCH_SIZE" 
-echo "Micro Rollout Batch Size: $MICRO_ROLLOUT_BATCH_SIZE"
+echo "--------------------------------"
 echo "KL Loss Coefficient: $KL_LOSS_COEF" 
 echo "KL Loss Type: $KL_LOSS_TYPE" 
 echo "Temperature: $TEMPERATURE" 
-echo "Rollout N: $ROLLOUT_N" 
 echo "KL Coefficient: $KL_COEF" 
 echo "Total Epochs: $TOTAL_EPOCHS"
 echo "Dataset Name: $DATASET_NAME"
@@ -215,11 +216,9 @@ echo "Disable Val Gen: $DISABLE_VAL_GEN"
 echo "VLLM Enforce Eager: $VLLM_ENFORCE_EAGER"
 echo "Max Val Sequence Length: $MAX_VAL_SEQ_LEN"
 echo "Val Sample Size: $VAL_SAMPLE_SIZE"
-echo "Micro Rollout Batch Size: $MICRO_ROLLOUT_BATCH_SIZE"
 echo "LOG FILE PATH: $LOG_FILE_PATH"
 
 max_num_batched_tokens=$(expr $MAX_PROMPT_LENGTH + $MAX_RESPONSE_LENGTH + 1000)
-echo -e "Training with the following parameters:\nTrain Batch Size: $TRAIN_BATCH_SIZE\nVal Batch Size: $VAL_BATCH_SIZE\nMax Prompt Length: $MAX_PROMPT_LENGTH\nMax Response Length: $MAX_RESPONSE_LENGTH\nLearning Rate: $LEARNING_RATE\nPPO Mini Batch Size: $PPO_MINI_BATCH_SIZE\nPPO Micro Batch Size: $PPO_MICRO_BATCH_SIZE\nKL Loss Coefficient: $KL_LOSS_COEF\nKL Loss Type: $KL_LOSS_TYPE\nTemperature: $TEMPERATURE\nRollout N: $ROLLOUT_N\nKL Coefficient: $KL_COEF\nTotal Epochs: $TOTAL_EPOCHS\nDataset Name: $DATASET_NAME\nModel Name: $MODEL_NAME"
 
 export WORKING_DIR=$(pwd)
 
@@ -233,14 +232,14 @@ ray job submit --address=127.0.0.1:6379 \
           "http_proxy": "",
           "https_proxy": "",
           "WANDB_MODE": "'${WANDB_MODE}'",
-          "WANDB_OFFICIAL": "1",
-          "VLLM_MAX_MODEL_LEN": "4096",
-          "CUDA_VISIBLE_DEVICES": "0,1",
-          "OMP_NUM_THREADS": "4",
-          "TORCH_CUDA_MEMORY_STATS": "1",
-          "TORCH_USE_CUDA_DSA": "0",
-          "TORCH_DISTRIBUTED_DEBUG": "INFO",
-          "RAY_memory_monitor_refresh_ms": "0"
+          "WANDB_DIR": "'${WANDB_DIR}'",
+          "WANDB_OFFICIAL": "'${WANDB_OFFICIAL}'",
+          "VLLM_MAX_MODEL_LEN": "'${VLLM_MAX_MODEL_LEN}'",
+          "CUDA_VISIBLE_DEVICES": "'${CUDA_VISIBLE_DEVICES}'",
+          "OMP_NUM_THREADS": "'${OMP_NUM_THREADS}'",
+          "TORCH_CUDA_MEMORY_STATS": "'${TORCH_CUDA_MEMORY_STATS}'",
+          "TORCH_USE_CUDA_DSA": "'${TORCH_USE_CUDA_DSA}'",
+          "TORCH_DISTRIBUTED_DEBUG": "'${TORCH_DISTRIBUTED_DEBUG}'"
         }
     }' \
   -- python -m verl.trainer.main_ppo \
