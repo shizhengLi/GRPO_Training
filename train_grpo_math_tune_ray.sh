@@ -12,7 +12,6 @@ export RAY_DEDUP_LOGS=1
 export PROJECT_NAME=verl_train
 export WANDB_MODE=offline
 export WANDB_OFFICIAL=1
-export VLLM_ATTENTION_BACKEND=XFORMERS
 export VLLM_MAX_MODEL_LEN=4096  # 限制VLLM最大序列长度
 export VLLM_ENFORCE_EAGER=0     # 禁用eager模式，解决InferenceMode冲突
 export VLLM_ENABLE_CUDA_GRAPH=1 # 启用CUDA图加速
@@ -27,6 +26,19 @@ export HDFS_CHECKPOINT_PATH=/data/lishizheng/code/simpleRL-reason/results/checkp
 export HDFS_LOG_PATH=/data/lishizheng/code/simpleRL-reason/results/logs
 export RUN_NAME=verl-grpo
 export ARNOLD_WORKER_NUM=1  # 1个节点，2张GPU
+export RAY_memory_monitor_refresh_ms=0  # 禁用worker killing，避免OOM导致任务被杀死
+
+# 添加Wandb run ID继承
+# 检查是否存在之前的wandb run id
+CHECKPOINT_DIR="/data/lishizheng/code/simpleRL-reason/results/checkpoints/verl-grpo_Qwen-2.5-0.5B_max_response2048_batch32_rollout2_klcoef0.0001_entcoef0.001_simplelr_math_35"
+WANDB_ID_FILE="${CHECKPOINT_DIR}/wandb_run_id.txt"
+
+if [ -f "$WANDB_ID_FILE" ]; then
+  export WANDB_RUN_ID=$(cat "$WANDB_ID_FILE")
+  echo "继续使用之前的Wandb运行ID: $WANDB_RUN_ID"
+else
+  echo "没有找到现有的Wandb ID，将创建新的运行"
+fi
 
 # 创建结果目录
 # mkdir -p /data/lishizheng/code/simpleRL-reason/results/data
@@ -36,7 +48,7 @@ export ARNOLD_WORKER_NUM=1  # 1个节点，2张GPU
 
 # Default values
 TRAIN_BATCH_SIZE=16
-VAL_BATCH_SIZE=8  # 减小验证批次大小，加快验证速度
+VAL_BATCH_SIZE=4  # 减少验证批次大小，避免OOM
 MAX_PROMPT_LENGTH=1024
 MAX_RESPONSE_LENGTH=3072
 LEARNING_RATE=5e-7
@@ -60,7 +72,7 @@ TEST_FREQ=5
 REMOVE_CLIP=False
 ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=2
 # 默认值改小，避免验证时内存占用过大
-MICRO_ROLLOUT_BATCH_SIZE=32
+MICRO_ROLLOUT_BATCH_SIZE=4
 REMOVE_PREVIOUS_CKPT=False
 # 增加验证超时设置，防止验证阶段无限等待
 VALIDATION_TIMEOUT=600  # 10分钟超时，避免过长等待
@@ -70,7 +82,7 @@ VLLM_ENFORCE_EAGER=False  # 禁用eager模式，避免InferenceMode冲突
 DISABLE_VAL_GEN=False  # 是否禁用验证生成
 MAX_VAL_SEQ_LEN=1024  # 限制验证生成的最大长度
 # 添加验证集采样大小参数，限制验证样本数量
-VAL_SAMPLE_SIZE=50  # 默认只验证50个样本，加快验证速度
+VAL_SAMPLE_SIZE=10  # 默认只验证10个样本，加快验证速度
 
 generate_suffix() {
   local suffix=""
@@ -134,7 +146,7 @@ while [[ "$#" -gt 0 ]]; do
     --train_batch_size) TRAIN_BATCH_SIZE="$2"; 
                         # 根据训练批次大小动态调整MICRO_ROLLOUT_BATCH_SIZE
                         if [ "$2" -le 32 ]; then
-                          MICRO_ROLLOUT_BATCH_SIZE=16
+                          MICRO_ROLLOUT_BATCH_SIZE=4
                         elif [ "$2" -le 64 ]; then
                           MICRO_ROLLOUT_BATCH_SIZE=32
                         else
@@ -222,17 +234,17 @@ ray job submit --address=127.0.0.1:6379 \
           "http_proxy": "",
           "https_proxy": "",
           "WANDB_MODE": "offline",
-          "WANDB_API_KEY": "0c90930bd30d414c2263d7e6425a152435d18fa8",
+          "WANDB_RUN_ID": "'${WANDB_RUN_ID}'",
           "WANDB_OFFICIAL": "1",
           "VLLM_MAX_MODEL_LEN": "4096",
           "VLLM_ENFORCE_EAGER": "0",
+          "VLLM_ENABLE_CUDA_GRAPH": "1",
           "CUDA_VISIBLE_DEVICES": "0,1",
           "OMP_NUM_THREADS": "4",
           "TORCH_CUDA_MEMORY_STATS": "1",
           "TORCH_USE_CUDA_DSA": "0",
           "TORCH_DISTRIBUTED_DEBUG": "INFO",
-          "RAY_memory_monitor_refresh_ms": "0",
-          "VLLM_ENABLE_CUDA_GRAPH": "1"
+          "RAY_memory_monitor_refresh_ms": "0"
         }
     }' \
   -- python -m verl.trainer.main_ppo \

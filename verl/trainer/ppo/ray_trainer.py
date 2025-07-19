@@ -535,8 +535,18 @@ class RayPPOTrainer(object):
         print('Starting validation phase...')
         start_time = time.time()
         
+        # 获取验证超时设置
+        validation_timeout = self.config.trainer.get('validation_timeout', 600)  # 默认10分钟
+        print(f"Validation timeout set to {validation_timeout} seconds")
+        
         batch_count = 0
         for test_data in self.val_dataloader:
+            # 检查是否超时
+            current_time = time.time()
+            if current_time - start_time > validation_timeout:
+                print(f"Validation timeout reached after {current_time - start_time:.2f}s, stopping validation")
+                break
+                
             batch_count += 1
             print(f'Processing validation batch {batch_count}/{len(self.val_dataloader)}')
             
@@ -564,7 +574,31 @@ class RayPPOTrainer(object):
             batch_start_time = time.time()
             print(f'Starting validation generation for batch {batch_count} at {batch_start_time - start_time:.2f}s...')
             
-            test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
+            # 添加超时检查
+            max_gen_time = validation_timeout / 2  # 单批次生成时间不应超过总超时时间的一半
+            try:
+                import signal
+                
+                # 定义超时处理函数
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"Generation took too long (>{max_gen_time}s)")
+                
+                # 设置超时信号
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(int(max_gen_time))
+                
+                # 尝试生成序列
+                test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
+                
+                # 取消超时设置
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+            except TimeoutError as e:
+                print(f"Validation generation timeout: {str(e)}")
+                continue
+            except Exception as e:
+                print(f"Error during validation generation: {str(e)}")
+                continue
             
             # 添加生成结束日志
             batch_end_time = time.time()
@@ -622,6 +656,8 @@ class RayPPOTrainer(object):
         # 添加验证时间指标
         metric_dict['val/time/total_seconds'] = total_val_time
         metric_dict['val/time/per_batch_seconds'] = total_val_time / batch_count if batch_count > 0 else 0
+        metric_dict['val/batches_processed'] = batch_count
+        metric_dict['val/total_samples'] = len(reward_tensor)
 
         return metric_dict
 
@@ -718,7 +754,19 @@ class RayPPOTrainer(object):
                                                            'latest_checkpointed_iteration.txt')
         with open(local_latest_checkpointed_iteration, 'w') as f:
             f.write(str(self.global_steps))
-            
+        
+        # 保存wandb run ID以便恢复时使用相同ID
+        try:
+            import wandb
+            if wandb.run is not None:
+                wandb_id_file = os.path.join(self.config.trainer.default_local_dir, 'wandb_run_id.txt')
+                with open(wandb_id_file, 'w') as f:
+                    f.write(wandb.run.id)
+                print(f"Saved wandb run ID {wandb.run.id} to {wandb_id_file}")
+        except Exception as e:
+            print(f"Failed to save wandb run ID: {e}")
+            pass
+
     # # 新增过滤方法（需在类中定义）
     # def _filter_batch(self, batch, mask: np.ndarray) -> DataProto:
     #     """根据布尔掩码过滤批次数据"""
